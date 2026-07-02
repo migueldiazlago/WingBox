@@ -1,7 +1,6 @@
 # WingBox
 
 **A minimal 3D finite-element solver for a cantilevered wing.**
-*Made with Claude Code*
 
 WingBox idealises a wing as a slender **beam** running along the span, clamped at
 the root, and loaded by a spanwise **lift distribution** $l(y)$ and **torsion
@@ -120,22 +119,15 @@ that is condensed into a handful of **section properties** at each station —
 numbers that summarise "how stiff is the section, and about what point". The
 figure below shows where each one comes from on a real wing box.
 
-![Wing section: shear centre, bending axes, torsion cell and shear webs](docs/wing_section.svg)
+![Wing section: elastic centre, bending axes, torsion cell and shear webs](docs/wing_section.svg)
 
-### Shear centre (SC) / elastic axis
-The point that matters here is the **shear centre**: the point of the section
-where a transverse load causes **bending without twist**. Push the wing there
-and it just bends; push it anywhere else and it also rotates. The line of shear
-centres along the span is the **elastic axis** — the axis the wing twists about.
-WingBox places its **nodes on this axis** (the `SC` field in the model), so
-bending and torsion decouple cleanly and the torsion input $q(y)$ is simply
-lift × offset. (Strictly, the shear centre — for bending/torsion decoupling — and
-the centroid / "tension centre" — for axial/bending decoupling — are *different*
-points in general; for a doubly-symmetric section they coincide. `SC` should be
-the shear centre. WingBox keeps **bending↔torsion decoupled** — valid for
-isotropic, roughly symmetric metal sections, but **not** for the bend–twist
-coupling of composite laminates — while the two **bending planes** *can* be
-coupled through the product of inertia $I_{yz}$, see below.)
+### Elastic centre (EC) / elastic axis
+The **elastic centre** (a.k.a. *shear centre*) is the point of the section where
+a transverse load causes **bending without twist**. Push the wing there and it
+just bends; push it anywhere else and it also rotates. The line of ECs along the
+span is the **elastic axis** — the axis the wing twists about. WingBox places its
+**nodes on the elastic centres** (the `EC` field in the model), so bending and
+torsion decouple cleanly and the torsion input $q(y)$ is simply lift × offset.
 
 ### Second moments of area $I_y,\,I_z$  →  bending stiffness $EI$
 The **second moment of area** $I$ (units m⁴) measures how far the load-carrying
@@ -156,26 +148,6 @@ Bigger $EI$ ⇒ less deflection. A wing has **two** of them:
 
 (The subscript follows the axis the section rotation is taken about; see the
 appendix. On the section figure they are the two dash-dot neutral axes.)
-
-### Product of inertia $I_{yz}$  →  coupling of the two bending planes
-$I_{yz}$ (units m⁴) is what makes flap and edge bending **talk to each other**.
-It is **zero** when the local $(y,z)$ axes are the section's *principal* axes —
-the case for a perfectly symmetric section. It is **non-zero** when those axes
-are tilted relative to the principal ones, which happens for asymmetric sections
-or, typically, when **streamwise sections are used on a swept wing**. The
-constitutive law then couples the two bending moments,
-
-$$
-\begin{bmatrix} M_y \\ M_z \end{bmatrix}
-= E\begin{bmatrix} I_y & I_{yz} \\ I_{yz} & I_z \end{bmatrix}
-\begin{bmatrix} \kappa_y \\ \kappa_z \end{bmatrix},
-$$
-
-so a pure lift load (flap bending) also produces a **chordwise deflection**, and
-vice-versa. In the bundled example a small $I_{yz}$ (≈ 7 % correlation) bends the
-tip ~11 mm fore-and-aft even though every applied load is vertical. Leave
-$I_{yz}=0$ (the default) for principal-axis sections. Note this is a
-**bending↔bending** coupling; WingBox still keeps bending decoupled from torsion.
 
 ### Torsion constant $J$  →  torsional stiffness $GJ$
 $J$ (units m⁴) plays the same role for twisting that $I$ plays for bending:
@@ -213,10 +185,9 @@ Aluminium is $E\approx 71$ GPa, $\nu\approx0.33$.
 
 | Symbol | Property | Stiffness it creates | Aeroelastic role |
 |--------|----------|----------------------|------------------|
-| `SC` | shear centre position | — | axis of twist; sets the lift offset $e$ |
+| `EC` | elastic centre position | — | axis of twist; sets the lift offset $e$ |
 | $I_z$ | flap second moment of area | $EI_z$ bending | wing bending / tip deflection |
 | $I_y$ | edge second moment of area | $EI_y$ bending | chordwise / in-plane bending |
-| $I_{yz}$ | product of inertia (default 0) | $EI_{yz}$ bend–bend coupling | flap↔edge coupling (swept/asymmetric) |
 | $J$ | torsion constant | $GJ$ torsion | twist, divergence, control effectiveness |
 | $A$ | area | $EA$ axial | spanwise stretch |
 | $A_{sy},A_{sz}$ | shear areas | transverse shear | shear-flexibility (short beams) |
@@ -235,9 +206,7 @@ a finite number of **elements** joined at nodes — the *finite element method*.
    enough that even a coarse mesh is essentially exact for beams.
 2. **Element stiffness.** For each element we build an $18\times18$ matrix
    $\mathbf K^e$ (6 DOF × 3 nodes) that relates the nodal displacements to the
-   nodal forces. The section properties are **interpolated to the integration
-   points** from the element's three nodal sections, so a tapered element varies
-   its stiffness continuously rather than using one representative section.
+   nodal forces, using the section properties above.
 3. **Assemble.** The element matrices are added into one global stiffness matrix
    $\mathbf K$ for the whole wing, and the distributed loads $l(y),q(y)$ are
    converted into equivalent nodal forces $\mathbf F$ (a *consistent load
@@ -247,16 +216,9 @@ a finite number of **elements** joined at nodes — the *finite element method*.
    displacements $\mathbf u$, then recover the **root reactions** as
    $\mathbf K\mathbf u - \mathbf F$ at the clamped DOF.
 
-For a **uniform** beam (constant section, unswept) this is a case where 1-D
-finite elements are **nodally exact** — the computed nodal values match the
-textbook Timoshenko cantilever formulas to machine precision (see
-[§8](#8-verification)). For a real **tapered, swept** wing that exactness no
-longer holds strictly — the polynomial shape functions cannot reproduce the
-variable-$EI$ solution exactly — but the section properties **are interpolated
-to the Gauss points** from the three nodal sections (not held constant per
-element), so a handful of elements is already well converged (the 6-element
-example agrees with the equilibrium load diagrams of [§5](#5-quick-start) to a
-fraction of a percent). The full derivation
+Because this is a 1-D problem solved with a consistent load vector, the nodal
+answers are **exact** — verified to machine precision against the textbook
+Timoshenko cantilever formulas (see [§8](#8-verification)). The full derivation
 (kinematics, weak form, shape functions, shear-locking cure) is in
 [Appendix A](#appendix-a--full-formulation).
 
@@ -282,7 +244,7 @@ print("tip twist [deg]    :", np.degrees(sol.rotations[-1, 1]))
 print("root reaction force :", sol.root_force)              # [Fx, Fy, Fz]
 print("root reaction moment:", sol.root_moment)             # [Mx, My, Mz]
 
-coords = np.array([s["SC"] for s in load_stations("wings/pc24_wing_sections.json")])
+coords = np.array([s["EC"] for s in load_stations("wings/pc24_wing_sections.json")])
 plot_deformation(coords, sol, scale=3.0)                    # 3D view (window)
 ```
 
@@ -319,12 +281,9 @@ plot_internal_forces(diag)
 
 ![Shear, bending-moment and torque diagrams](docs/internal_forces.png)
 
-The root values ($V(0)\approx100$ kN, $M(0)\approx354$ kN·m, $T(0)\approx15$
-kN·m) are the total shear/moment/torque reacted at the fuselage. The shear and
-bending moment match the `Solution` root reactions to within the FE
-load-quadrature error (< 0.1 %); the torque agrees in magnitude but the reaction
-*moment about the span* additionally carries a projection of the bending moment
-because the wing is swept, so compare it with care.
+The root values ($V(0)\approx100$ kN, $M(0)\approx355$ kN·m, $T(0)\approx15$
+kN·m) equal the total shear/moment/torque reacted at the fuselage — matching the
+`Solution` root reactions up to the load-integration tolerance.
 
 ---
 
@@ -332,21 +291,21 @@ because the wing is swept, so compare it with care.
 
 ### Sections — `wings/*_wing_sections.json`
 
-A wing is a list of **stations** along the span. Each station gives the shear
-centre `SC` (its 3-D position) and the section properties there. Properties may
+A wing is a list of **stations** along the span. Each station gives the elastic
+centre `EC` (its 3-D position) and the section properties there. Properties may
 **taper** from station to station.
 
 ```json
 {
   "Wingsection": {
     "station1": {
-      "SC": [0.0, 0.0, 0.0],
+      "EC": [0.0, 0.0, 0.0],
       "E": 71.0e9, "nu": 0.33,
-      "A": 0.01716, "Iy": 0.00263177, "Iz": 0.00029243, "Iyz": 5.849e-05, "J": 0.00087008,
+      "A": 0.01716, "Iy": 0.00263177, "Iz": 0.00029243, "J": 0.00087008,
       "ky": 0.5, "kz": 0.5
     },
-    "station2": { "SC": [0.062, 0.708, 0.0], "...": "..." },
-    "station3": { "SC": [0.124, 1.417, 0.0], "...": "..." }
+    "station2": { "EC": [0.062, 0.708, 0.0], "...": "..." },
+    "station3": { "EC": [0.124, 1.417, 0.0], "...": "..." }
   }
 }
 ```
@@ -359,7 +318,9 @@ See [`wings/pc24_wing_sections.json`](wings/pc24_wing_sections.json).
 
 The lift $l(y)$ and torsion $q(y)$ are each tabulated at a handful of spanwise
 points and **linearly interpolated** in between (clamped to the end values
-outside the range):
+outside the range). Remember these are the **net** running loads: fold in the
+$n$g weight of the wing, fuel and any pylons/engines/stores/gear (and their
+elastic-axis offsets for $q$) before tabulating them here — see the note in §1.
 
 ```json
 {
@@ -373,12 +334,6 @@ outside the range):
 
 See [`wings/pc24_loads.json`](wings/pc24_loads.json).
 
-**Reminder:** these `l` and `q` columns are the **net** running loads — the
-aerodynamic distribution already combined with the ×$n$ weight of the wing
-structure, fuel and any pylons/engines/stores/gear (see the note in §1). The
-bundled example is *lift only* for clarity; a real load case would subtract the
-inertial terms and add their torsion contributions.
-
 ---
 
 ## 7. Bundled example — a PC-24-like wing
@@ -391,22 +346,15 @@ wing box, discretised with **13 stations → 6 elements**. The load is an
 to-elastic-axis offset. Running it:
 
 ```
-Tip vertical deflection (global Z):  0.5003 m   (≈ 6% of semi-span)
-Tip chordwise deflection (global X): +0.0110 m  (from Iyz coupling)
-Tip twist (about global Y):          -0.0735 deg
-Root reaction force  [N]:   [      0.        0.  -100064.6]
-Root reaction moment [N.m]: [-354266.4   15984.0        0. ]
+Tip vertical deflection (global Z): 0.5126 m   (≈ 6% of semi-span)
+Tip twist (about global Y):         -0.0738 deg
+Root reaction force  [N]:   [      0.        0.  -100446.6]
+Root reaction moment [N.m]: [-355617.3   16044.9        0. ]
 ```
 
 The vertical reaction (≈ 100 kN down) balances the applied lift, and the root
-bending moment (≈ 354 kN·m) equals $\int l(y)\,y\,\mathrm{d}y$ — sanity checks a
-flight-mechanics reader can verify by hand. The small **chordwise tip deflection
-(≈ 11 mm)** is produced purely by the section product of inertia $I_{yz}$: every
-applied load is vertical, yet the coupled bending planes bend the tip fore-and-aft.
-(The reaction moment about the span, ≈ 16 kN·m, is *not* the pure torque
-$T(0)\approx15$ kN·m: on a swept wing the root reaction about $Y$ mixes torsion
-with a projection of the bending moment. The reactions themselves are unchanged
-by $I_{yz}$ — they follow from equilibrium of the applied loads.)
+bending moment (≈ 356 kN·m) equals $\int l(y)\,y\,\mathrm{d}y$ — sanity checks a
+flight-mechanics reader can verify by hand.
 
 > The section properties here are reasonable engineering estimates of a wing box,
 > not PC-24 certification data (which is not public). The diagrams in this README
@@ -460,8 +408,7 @@ $$
 
 three translations $(u, v, w)$ along the local axes $(x, y, z)$ and three
 rotations $(r_x, r_y, r_z)$ about them. The local $x$-axis runs along the beam;
-$y$ and $z$ are the cross-section axes (the principal axes when $I_{yz}=0$). An
-element has three nodes —
+$y$ and $z$ are the cross-section principal axes. An element has three nodes —
 `[end1, mid, end2]` — so **18 DOF per element**. All six fields use the **same**
 quadratic Lagrange shape functions (equal-order interpolation), which is why the
 transverse-shear terms need special integration (§A.7).
@@ -509,27 +456,19 @@ in Euler–Bernoulli theory, where $r_z \equiv v'$ and $r_y \equiv -w'$.
 ## A.4 Constitutive relations
 
 The section resultants — axial force $N$, torque $T$, bending moments $M_y,M_z$,
-shear forces $V_y,V_z$ — follow the constitutive law
+shear forces $V_y,V_z$ — follow a **diagonal** law
 $\boldsymbol{\sigma} = \mathbf{D}\,\boldsymbol{\varepsilon}$:
 
 $$
 \begin{bmatrix} N \\ T \\ M_y \\ M_z \\ V_y \\ V_z \end{bmatrix}
 =
-\begin{bmatrix}
-EA & 0 & 0 & 0 & 0 & 0 \\
-0 & GJ & 0 & 0 & 0 & 0 \\
-0 & 0 & EI_y & EI_{yz} & 0 & 0 \\
-0 & 0 & EI_{yz} & EI_z & 0 & 0 \\
-0 & 0 & 0 & 0 & GA_{sy} & 0 \\
-0 & 0 & 0 & 0 & 0 & GA_{sz}
-\end{bmatrix}
-\begin{bmatrix} \varepsilon_x \\ \kappa_x \\ \kappa_y \\ \kappa_z \\ \gamma_{xy} \\ \gamma_{xz} \end{bmatrix}
+\mathbf{D}\,
+\begin{bmatrix} \varepsilon_x \\ \kappa_x \\ \kappa_y \\ \kappa_z \\ \gamma_{xy} \\ \gamma_{xz} \end{bmatrix},
+\qquad
+\mathbf{D} = \mathrm{diag}\big(EA,\; GJ,\; EI_y,\; EI_z,\; G A_{sy},\; G A_{sz}\big).
 $$
 
 with $G = E/[2(1+\nu)]$ and effective shear areas $A_{sy}=k_yA$, $A_{sz}=k_zA$.
-The only off-diagonal terms are the product of inertia $EI_{yz}$, which couples
-the two bending moments $M_y, M_z$; they vanish ($I_{yz}=0$) when $(y,z)$ are the
-section principal axes. Bending stays decoupled from axial, torsion and shear.
 
 ## A.5 Strong form (beam equilibrium)
 
@@ -624,11 +563,9 @@ $$
 + \underbrace{\int \mathbf{B}^{\mathsf T} \mathbf{D}_{\text{shear}}\, \mathbf{B}\;\mathrm{d}x}_{\text{2-point (reduced)}}
 $$
 
-with $\mathbf{D}_{\text{bend}} = \mathrm{diag}(EA, GJ, EI_y, EI_z, 0, 0)$ (plus
-the off-diagonal $EI_{yz}$ coupling $M_y,M_z$ of §A.4) and
-$\mathbf{D}_{\text{shear}} = \mathrm{diag}(0,0,0,0,GA_{sy},GA_{sz})$. The
-product-of-inertia term lives in the bending group, so it is fully integrated.
-This yields exactly **6 rigid-body modes and no spurious mechanism**.
+with $\mathbf{D}_{\text{bend}} = \mathrm{diag}(EA, GJ, EI_y, EI_z, 0, 0)$ and
+$\mathbf{D}_{\text{shear}} = \mathrm{diag}(0,0,0,0,GA_{sy},GA_{sz})$. This yields
+exactly **6 rigid-body modes and no spurious mechanism**.
 
 ## A.9 Coordinate transformation
 
@@ -664,12 +601,10 @@ $I_y$.
 ## A.10 Assembly, loads and solution
 
 With $n = 2n_e + 1$ stations, element $e$ owns nodes $[2e,\,2e{+}1,\,2e{+}2]$
-(end nodes shared) and carries the three nodal `Section` objects; the
-constitutive matrix $\mathbf D(\xi) = \sum_i N_i(\xi)\,\mathbf D_i$ is
-interpolated to the Gauss points, so tapered properties vary within the element.
-Element stiffnesses scatter into the global $6n\times6n$ matrix $\mathbf K$. The
-distributed loads become a **consistent nodal load vector** through the shape
-functions,
+(end nodes shared) and takes a constant `Section` from its mid station
+(piecewise-constant along a taper). Element stiffnesses scatter into the global
+$6n\times6n$ matrix $\mathbf K$. The distributed loads become a **consistent
+nodal load vector** through the shape functions,
 
 $$
 F_i = \int N_i(y)\, l(y)\,\mathrm{d}y \ \text{(global-}Z\text{ DOF)}, \qquad

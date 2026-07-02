@@ -14,8 +14,9 @@ Pipeline
    ``q(y)`` the global-Y rotation DOF.
 4. Clamp the root (node 0, all 6 DOF) and solve ``K u = F``.
 
-Each element uses a single, constant :class:`Section` taken at its mid
-station (piecewise-constant properties along a tapered span).
+Each element carries the three nodal :class:`Section` objects and interpolates
+their properties to the Gauss points, so a tapered span varies continuously
+within every element (not piecewise-constant).
 """
 
 from __future__ import annotations
@@ -57,12 +58,12 @@ def build_elements(stations, ref_vec=(0.0, 0.0, 1.0)) -> list[BeamElement]:
     if n < 3 or n % 2 == 0:
         raise ValueError(f"need an odd number of stations >= 3, got {n}")
 
-    coords = np.array([s["EC"] for s in stations])
+    coords = np.array([s["SC"] for s in stations])
     elements = []
     for e in range((n - 1) // 2):
         node_ids = [2 * e, 2 * e + 1, 2 * e + 2]
-        section = stations[2 * e + 1]["section"]  # mid-station properties
-        elements.append(BeamElement(node_ids, coords[node_ids], section, ref_vec))
+        secs = [stations[i]["section"] for i in node_ids]  # per-node sections
+        elements.append(BeamElement(node_ids, coords[node_ids], secs, ref_vec))
     return elements
 
 
@@ -77,17 +78,24 @@ def assemble_stiffness(elements, n_nodes: int) -> np.ndarray:
 
 
 def assemble_loads(elements, loads: Loads, n_nodes: int, ngp: int = 3) -> np.ndarray:
-    """Consistent nodal load vector from the distributed lift/torsion."""
+    """Consistent nodal load vector from the distributed lift/torsion.
+
+    ``l`` and ``q`` are given per unit *span* (per ``dy``), so the load is
+    integrated over the spanwise coordinate y: ``F_i = int N_i(y) load(y) dy``.
+    The Jacobian is therefore ``dy/dxi`` (the element's span extent), not its
+    3-D arc length ``L/2`` -- the two differ for a swept element, and using the
+    arc length would over-scale the load by ``L / dy = 1 / cos(sweep)``.
+    """
     ndof = 6 * n_nodes
     F = np.zeros(ndof)
     pts, wts = _GAUSS[ngp]
     for el in elements:
         y_nodes = el.node_coords[:, 1]  # span coordinate = global Y
-        jac = el.length / 2.0
         fe = np.zeros(BeamElement.N_DOF)
         for xi, w in zip(pts, wts):
-            N, _ = shape_functions(xi)
-            y = float(N @ y_nodes)  # isoparametric map to physical span
+            N, dN = shape_functions(xi)
+            y = float(N @ y_nodes)      # isoparametric map to physical span
+            jac = float(dN @ y_nodes)   # dy/dxi (loads are per unit span in y)
             scale = w * jac
             fe[_LIFT_DOF::6] += N * loads.l(y) * scale
             fe[_TORSION_DOF::6] += N * loads.q(y) * scale

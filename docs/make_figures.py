@@ -66,34 +66,35 @@ def fig_wing_model():
 
     fig, (a, b) = plt.subplots(1, 2, figsize=(12.5, 4.8))
 
-    # ---- (a) side view: span (y) vs lift (z) -----------------------------
-    a.axhline(0, color="k", lw=2, zorder=3)                       # beam
-    a.plot(ys, 0 * ys, "o", color="k", ms=5, zorder=4)           # nodes
-    a.add_patch(Rectangle((-0.9, -1.7), 0.9, 3.4, hatch="////",
+    # ---- (a) side view: span (y) vs lift (z); the wing bends UP ----------
+    defl = 1.3 * (ys / L) ** 2                                    # deflected shape
+    a.plot([0, L], [0, 0], "--", color="0.6", lw=1.2, zorder=2)   # undeformed
+    a.plot(ys, 0 * ys, "o", color="0.6", ms=4, zorder=3)          # nodes
+    a.plot(ys, defl, "-", color="0.25", lw=2.4, zorder=4)         # deformed (UP)
+    a.plot(ys, defl, "o", color="0.25", ms=4, zorder=5)
+    a.text(L + 0.05, defl[-1] + 0.15, "deformed\n(bends up)", color="0.25",
+           ha="right", va="bottom", fontsize=9)
+
+    a.add_patch(Rectangle((-0.9, -2.0), 0.9, 4.0, hatch="////",
                           facecolor="0.85", edgecolor="k", zorder=2))
-    a.text(-0.45, -2.15, "clamped root\nall 6 DOF = 0", ha="center",
-           va="top", fontsize=9)
+    a.text(-0.45, 2.15, "clamped root\nall 6 DOF = 0", ha="center",
+           va="bottom", fontsize=9)
 
-    for yi, li in zip(ys, lift):                                  # lift arrows
+    # lift acts upward: arrows from below, heads on the wing
+    for yi, li in zip(ys, lift):
         if li > 1e-3:
-            arrow(a, (yi, 0), (yi, 2.0 * li), color="#1f77b4", lw=1.6)
-    a.plot(ys, 2.0 * lift, "--", color="#1f77b4", lw=1.2)
-    a.text(L * 0.5, 2.35, "lift  $l(y)$  (elliptical)", color="#1f77b4",
-           ha="center", fontsize=10)
+            arrow(a, (yi, -1.7 * li), (yi, 0), color="#1f77b4", lw=1.6)
+    a.plot(ys, -1.7 * lift, "--", color="#1f77b4", lw=1.2)
+    a.text(L * 0.5, -2.05, "lift  $l(y)$  (elliptical, acts upward)",
+           color="#1f77b4", ha="center", va="top", fontsize=10)
 
-    defl = 1.4 * (ys / L) ** 2                                    # deformed shape
-    a.plot(ys, -defl, "-", color="0.4", lw=2)
-    a.plot(ys, 0 * ys, ":", color="0.6", lw=1)
-    a.text(L, -defl[-1] - 0.15, "deformed", color="0.4", ha="right", va="top",
-           fontsize=9)
-
-    arrow(a, (0, -2.6), (2, -2.6), color="k", mut=12)
-    a.text(2.1, -2.6, "span  $y$", va="center", fontsize=9)
-    arrow(a, (0, -2.6), (0, -1.4), color="k", mut=12)
-    a.text(0.15, -1.35, "lift  $z$", va="bottom", fontsize=9)
-    a.set_title("(a)  side view — cantilever bending under lift")
-    a.set_xlim(-1.2, L + 1.2)
-    a.set_ylim(-3.0, 2.8)
+    arrow(a, (0.3, 2.5), (2.3, 2.5), color="k", mut=12)
+    a.text(2.45, 2.5, "span  $y$", va="center", fontsize=9)
+    arrow(a, (0.3, 2.5), (0.3, 3.4), color="k", mut=12)
+    a.text(0.45, 3.35, "lift  $z$", va="bottom", fontsize=9)
+    a.set_title("(a)  side view — cantilever bends up under lift")
+    a.set_xlim(-1.2, L + 1.6)
+    a.set_ylim(-2.8, 3.7)
     a.set_aspect("equal")
     a.axis("off")
 
@@ -115,9 +116,24 @@ def fig_wing_model():
                           hatch="////", facecolor="0.85", edgecolor="k", zorder=2))
 
     b.plot(ys, xea, "-", color="#d62728", lw=2, zorder=4,
-           label="elastic axis (beam, through EC)")
+           label="elastic axis (beam, through SC)")
     b.plot(ys, xac, "--", color="#1f77b4", lw=1.8, zorder=4,
            label="aerodynamic axis (¼-chord, lift acts here)")
+
+    # streamwise cut (constant y, ∥ chord) vs cut ⊥ to the swept beam:
+    # they differ by the sweep, which is what makes streamwise sections
+    # give a non-zero product of inertia I_yz.
+    jc = 2
+    yc, cc = ys[jc], c[jc]
+    b.plot([yc, yc], [le[jc], te[jc]], color="#9467bd", lw=3, zorder=6)
+    b.text(yc - 0.12, le[jc] - 0.08, "streamwise\nsection", color="#9467bd",
+           fontsize=8.5, ha="right", va="bottom")
+    n = np.array([-np.sin(sweep), np.cos(sweep)])           # ⊥ to elastic axis
+    p = np.array([yc, xea[jc]])
+    seg = np.array([p - 0.5 * cc * n, p + 0.5 * cc * n])
+    b.plot(seg[:, 0], seg[:, 1], "--", color="#2ca02c", lw=2.2, zorder=6)
+    b.text(seg[1, 0] - 0.1, seg[1, 1] + 0.05, "cut ⊥ beam", color="#2ca02c",
+           fontsize=8.5, ha="center", va="bottom")
 
     # offset e -> torque, drawn at a mid station
     j = 5
@@ -190,7 +206,7 @@ def fig_node_dofs():
 
 
 # --------------------------------------------------------------------------
-# 3. real wing section: airfoil + wing box + EC/AC + bending axes + torsion
+# 3. real wing section: airfoil + wing box + SC/AC + bending axes + torsion
 # --------------------------------------------------------------------------
 def fig_wing_section():
     x, up, lo, cam = naca4(0.02, 0.4, 0.12)
@@ -216,30 +232,30 @@ def fig_wing_section():
     ax.plot(xx, surf(xx, up), color="#1f77b4", lw=4, zorder=2)
     ax.plot(xx, surf(xx, lo), color="#1f77b4", lw=4, zorder=2)
 
-    # aerodynamic centre (¼-chord) and elastic centre / shear axis
-    xac, xec = 0.25, 0.42
+    # aerodynamic centre (¼-chord) and shear centre (on the elastic axis)
+    xac, xsc = 0.25, 0.42
     ax.plot(xac, 0, "o", color="#1f77b4", ms=9, zorder=6)
     ax.annotate("aerodynamic centre (¼-chord)\nlift $L$ acts here",
                 (xac, 0), (xac - 0.02, 0.22), fontsize=9, color="#1f77b4",
                 ha="center", arrowprops=dict(arrowstyle="->", color="#1f77b4"))
-    ax.plot(xec, surf(xec, cam), "s", color="#d62728", ms=9, zorder=6)
-    ax.annotate("elastic centre EC\n(shear axis)", (xec, surf(xec, cam)),
-                (xec + 0.22, -0.20), fontsize=9, color="#d62728",
+    ax.plot(xsc, surf(xsc, cam), "s", color="#d62728", ms=9, zorder=6)
+    ax.annotate("shear centre SC\n(on elastic axis)", (xsc, surf(xsc, cam)),
+                (xsc + 0.22, -0.20), fontsize=9, color="#d62728",
                 ha="center", arrowprops=dict(arrowstyle="->", color="#d62728"))
 
-    # offset e between lift line and EC
-    ax.annotate("", xy=(xec, 0.0), xytext=(xac, 0.0),
+    # offset e between lift line and SC
+    ax.annotate("", xy=(xsc, 0.0), xytext=(xac, 0.0),
                 arrowprops=dict(arrowstyle="<->", color="0.2"))
-    ax.text(0.5 * (xac + xec), 0.035, "$e$", fontsize=12, ha="center")
+    ax.text(0.5 * (xac + xsc), 0.035, "$e$", fontsize=12, ha="center")
 
-    # bending neutral axes through EC
-    zc = surf(xec, cam)
+    # bending neutral axes through SC
+    zc = surf(xsc, cam)
     ax.plot([xf - 0.05, xr + 0.08], [zc, zc], "-.", color="#d62728", lw=1.2)
     ax.text(xr + 0.10, zc, "flap (vertical) bending\nneutral axis  →  $EI_z$",
             fontsize=8.5, va="center", color="#d62728")
-    ax.plot([xec, xec], [surf(xec, lo) - 0.05, surf(xec, up) + 0.05],
+    ax.plot([xsc, xsc], [surf(xsc, lo) - 0.05, surf(xsc, up) + 0.05],
             "-.", color="#2ca02c", lw=1.2)
-    ax.text(xec, surf(xec, up) + 0.07,
+    ax.text(xsc, surf(xsc, up) + 0.07,
             "edge (chordwise) bending → $EI_y$", fontsize=8.5, ha="center",
             color="#2ca02c")
 
@@ -274,7 +290,7 @@ def fig_output():
 
     wing, loads = "wings/pc24_wing_sections.json", "wings/pc24_loads.json"
     sol = solve_wing(wing, loads)
-    coords = np.array([s["EC"] for s in load_stations(wing)])
+    coords = np.array([s["SC"] for s in load_stations(wing)])
     plot_deformation(coords, sol, scale=3.0, save=f"{HERE}/deformation.png")
 
     intf = internal_forces(load_loads(loads), span=coords[:, 1].max())

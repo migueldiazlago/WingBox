@@ -70,7 +70,10 @@ class BeamElement:
     node_ids : the three global node indices ``[end1, mid, end2]`` (used
         by the assembler; not required to compute the stiffness).
     node_coords : (3, 3) global coordinates of the three nodes, same order.
-    section : :class:`~wingbox.stations.Section` (material + geometry).
+    sections : one :class:`~wingbox.stations.Section` (constant element) or a
+        sequence of three, one per node. When three are given the section
+        properties are interpolated to the Gauss points (tapered element); a
+        single section is equivalent to three identical ones.
     ref_vec : reference vector approximating the local y-direction; the
         local frame is built from it by Gram-Schmidt against the beam
         axis. Default ``(0, 0, 1)`` (global Z). For a beam running along
@@ -84,14 +87,22 @@ class BeamElement:
         self,
         node_ids,
         node_coords,
-        section: Section,
+        sections,
         ref_vec=(0.0, 0.0, 1.0),
     ):
         self.node_ids = np.asarray(node_ids, dtype=int)
         self.node_coords = np.asarray(node_coords, dtype=float)
         if self.node_coords.shape != (3, 3):
             raise ValueError("node_coords must have shape (3, 3)")
-        self.section = section
+        if isinstance(sections, Section):
+            sections = (sections, sections, sections)
+        self.sections = list(sections)
+        if len(self.sections) != self.N_NODES:
+            raise ValueError("sections must be a Section or a sequence of 3")
+        # Pre-compute each node's constitutive matrices for interpolation.
+        parts = [self._section_constitutive(s) for s in self.sections]
+        self._Db = [p[0] for p in parts]   # bending group, per node
+        self._Ds = [p[1] for p in parts]   # shear group, per node
         self.ref_vec = np.asarray(ref_vec, dtype=float)
 
     # -- geometry -----------------------------------------------------------
@@ -158,34 +169,41 @@ class BeamElement:
             B[5, c + 4] = N[i]             # gamma_xz <- +ry
         return B
 
-    def _constitutive(self):
-        """Return the (bending-group, shear-group) diagonal constitutive parts."""
-        s = self.section
+    @staticmethod
+    def _section_constitutive(s: Section):
+        """(bending-group, shear-group) constitutive matrices for one section.
+
+        The bending group is diagonal except for the product-of-inertia term
+        ``E*Iyz`` coupling the two bending curvatures (kappa_y, kappa_z); it is
+        zero when the local axes are the section principal axes. The two groups
+        are integrated with different Gauss rules (selective reduced).
+        """
         E, G = s.E, s.G
-        # Full 6-term diagonal law, split so each group is integrated
-        # with its own Gauss rule (selective reduced integration).
         d_bending = np.diag([E * s.A, G * s.J, E * s.Iy, E * s.Iz, 0.0, 0.0])
+        d_bending[2, 3] = d_bending[3, 2] = E * s.Iyz  # kappa_y <-> kappa_z
         d_shear = np.diag([0.0, 0.0, 0.0, 0.0, G * s.A_sy, G * s.A_sz])
         return d_bending, d_shear
 
-    def _integrate(self, D: np.ndarray, ngp: int) -> np.ndarray:
-        """Integrate B^T D B with an ``ngp``-point Gauss rule."""
-        jac = self.length / 2.0
-        pts, wts = _GAUSS[ngp]
-        K = np.zeros((self.N_DOF, self.N_DOF))
-        for xi, w in zip(pts, wts):
-            B = self._strain_displacement(xi, jac)
-            K += (B.T @ D @ B) * w * jac
-        return K
+    def _interp(self, mats, xi: float) -> np.ndarray:
+        """Interpolate the per-node matrices ``mats`` to ``xi`` (shape funcs)."""
+        N, _ = shape_functions(xi)
+        return N[0] * mats[0] + N[1] * mats[1] + N[2] * mats[2]
 
     def local_stiffness(self) -> np.ndarray:
         """(18, 18) element stiffness in the local frame.
 
-        Axial/torsion/bending use full (3-point) integration; the two
-        transverse-shear terms use reduced (2-point) integration.
+        The section constitutive matrix is interpolated to each Gauss point
+        from the three nodal sections, so a tapered element varies its
+        properties continuously. Axial/torsion/bending use full (3-point)
+        integration; the transverse-shear terms use reduced (2-point).
         """
-        d_bending, d_shear = self._constitutive()
-        return self._integrate(d_bending, 3) + self._integrate(d_shear, 2)
+        jac = self.length / 2.0
+        K = np.zeros((self.N_DOF, self.N_DOF))
+        for ngp, mats in ((3, self._Db), (2, self._Ds)):
+            for xi, w in zip(*_GAUSS[ngp]):
+                B = self._strain_displacement(xi, jac)
+                K += (B.T @ self._interp(mats, xi) @ B) * w * jac
+        return K
 
     def stiffness(self) -> np.ndarray:
         """(18, 18) element stiffness in the global frame, ``T^T K_local T``."""

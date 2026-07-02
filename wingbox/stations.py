@@ -1,14 +1,14 @@
 """Wing stations: combined material/section record + JSON loader.
 
-A wing JSON lists stations along the span, ``EC`` being the section's
-elastic centre::
+A wing JSON lists stations along the span, ``SC`` being the section's
+shear centre (the point that lies on the elastic axis)::
 
     {
       "Wingsection": {
         "station1": {
-          "EC": [x, y, z],
+          "SC": [x, y, z],
           "E": 70e9, "nu": 0.33,
-          "A": 5e-3, "Iy": 4.16e-7, "Iz": 1.04e-6, "J": 1.46e-6,
+          "A": 5e-3, "Iy": 4.16e-7, "Iz": 1.04e-6, "Iyz": 0.0, "J": 1.46e-6,
           "ky": 0.833, "kz": 0.833
         },
         "station2": { ... }
@@ -17,7 +17,7 @@ elastic centre::
 
 :func:`load_stations` returns a plain list of station dicts, each::
 
-    {"name": str, "EC": (3,) ndarray, "section": Section}
+    {"name": str, "SC": (3,) ndarray, "section": Section}
 
 ordered by the trailing integer in the station name.
 """
@@ -34,12 +34,15 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Section:
-    """Material + cross-section properties, in local principal axes.
+    """Material + cross-section properties, in the local element frame.
 
-    Local x runs along the beam; (y, z) are the section principal axes, so
-    ``Iz`` bends in the local x-y plane, ``Iy`` in the local x-z plane, and
-    ``J`` is the St. Venant torsion constant. ``ky, kz`` are Timoshenko shear
-    correction factors (default 5/6).
+    Local x runs along the beam; (y, z) are the cross-section axes, so ``Iz``
+    bends in the local x-y plane, ``Iy`` in the local x-z plane, and ``J`` is
+    the St. Venant torsion constant. ``Iyz`` is the product of inertia: it is
+    zero when (y, z) are the section *principal* axes and non-zero otherwise
+    (asymmetric sections, or streamwise sections on a swept wing), coupling the
+    two bending planes. ``ky, kz`` are Timoshenko shear correction factors
+    (default 5/6).
     """
 
     E: float
@@ -47,6 +50,7 @@ class Section:
     Iy: float
     Iz: float
     J: float
+    Iyz: float = 0.0
     nu: float = 0.3
     ky: float = 5.0 / 6.0
     kz: float = 5.0 / 6.0
@@ -84,7 +88,7 @@ def load_stations(path: str | Path) -> list[dict]:
     stations = [
         {
             "name": name,
-            "EC": np.asarray(block["EC"], dtype=float),
+            "SC": np.asarray(block["SC"], dtype=float),
             "section": Section.from_dict(block),
         }
         for name, block in wing.items()
