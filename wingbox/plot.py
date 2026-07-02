@@ -68,7 +68,7 @@ def plot_deformation(
 
     Parameters
     ----------
-    coords : (n_nodes, 3) undeformed node positions (station shear centres).
+    coords : (n_nodes, 3) undeformed node positions (station elastic centres).
     sol : the :class:`~wingbox.assemble.Solution` to visualise.
     scale : magnification applied to *both* the translational deflection and
         the section twist (they share the same scale).
@@ -124,8 +124,8 @@ def plot_deformation(
     ax.set_ylabel("Y  (span)")
     ax.set_zlabel("Z  (lift)")
     ax.set_title(
-        f"Wing deformation ×{scale:g}   "
-        f"(tip: {deformed[-1, 2]/scale:.3f} m, {twist_deg[-1]:+.3f}°)"
+        f"Tip: {deformed[-1, 2]/scale:.3f} m, {twist_deg[-1]:+.3f}°\n"
+        f"Deformation scale = {scale:.1f}x"
     )
     ax.legend(loc="upper left")
     ax.view_init(elev=22, azim=-62)
