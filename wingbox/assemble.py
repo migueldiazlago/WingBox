@@ -126,3 +126,55 @@ def solve_wing(wing_path, loads_path, ref_vec=(0.0, 0.0, 1.0)) -> Solution:
         root_force=reaction[:3],
         root_moment=reaction[3:],
     )
+
+
+@dataclass(frozen=True)
+class InternalForces:
+    """Spanwise internal-force diagrams along the wing.
+
+    Attributes
+    ----------
+    y : (n,) spanwise coordinate from root (0) to tip (L).
+    V : (n,) transverse shear force (lift direction) [N].
+    M : (n,) flap bending moment (about the chordwise axis) [N.m].
+    T : (n,) torque about the span axis [N.m].
+    """
+
+    y: np.ndarray
+    V: np.ndarray
+    M: np.ndarray
+    T: np.ndarray
+
+
+def _rev_cumtrapz(f: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Right-cumulative trapezoidal integral: g[i] = integral_{x[i]}^{x[-1]} f dx."""
+    seg = 0.5 * (f[:-1] + f[1:]) * np.diff(x)
+    g = np.zeros_like(f, dtype=float)
+    g[:-1] = np.cumsum(seg[::-1])[::-1]
+    return g
+
+
+def internal_forces(loads: Loads, span: float, n: int = 201) -> InternalForces:
+    """Shear ``V(y)``, bending moment ``M(y)`` and torque ``T(y)`` diagrams.
+
+    The wing is a statically determinate cantilever, so the internal forces at a
+    section equal the resultant of everything outboard of it:
+
+        V(y) = integral_y^L l dn,
+        M(y) = integral_y^L l(n) (n - y) dn,
+        T(y) = integral_y^L q dn,
+
+    with lift ``l`` and torsion ``q`` per unit span and ``L = span``. Being pure
+    equilibrium, they are exact for the given (piecewise-linear) load and depend
+    only on it, not on the stiffness. The root values ``V(0), M(0), T(0)`` are
+    the total shear/moment/torque carried by the wing; they match the
+    :class:`Solution` root reactions to within the FE load-quadrature error (and,
+    for a swept wing, the reaction moment about the span mixes bending and
+    torsion, so compare magnitudes with care).
+    """
+    y = np.linspace(0.0, span, n)
+    l, q = loads.l(y), loads.q(y)
+    V = _rev_cumtrapz(l, y)
+    M = _rev_cumtrapz(l * y, y) - y * V   # = integral l (n - y) dn
+    T = _rev_cumtrapz(q, y)
+    return InternalForces(y, V, M, T)

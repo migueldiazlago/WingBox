@@ -7,8 +7,8 @@ elements carrying 6 DOF per node ``[u, v, w, rx, ry, rz]``.
 from wingbox.stations import Section, load_stations
 from wingbox.loads import Loads, load_loads
 from wingbox.element import BeamElement
-from wingbox.assemble import Solution, solve_wing
-from wingbox.plot import plot_deformation
+from wingbox.assemble import Solution, InternalForces, solve_wing, internal_forces
+from wingbox.plot import plot_deformation, plot_internal_forces
 
 __all__ = [
     "Section",
@@ -17,6 +17,9 @@ __all__ = [
     "load_loads",
     "BeamElement",
     "Solution",
+    "InternalForces",
     "solve_wing",
+    "internal_forces",
     "plot_deformation",
+    "plot_internal_forces",
 ]

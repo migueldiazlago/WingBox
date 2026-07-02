@@ -7,7 +7,10 @@ The root (node 0) is always clamped.
 
 import numpy as np
 
-from wingbox import solve_wing, plot_deformation, load_stations
+from wingbox import (
+    solve_wing, internal_forces, plot_deformation, plot_internal_forces,
+    load_stations, load_loads,
+)
 
 WING = "wings/pc24_wing_sections.json"
 LOADS = "wings/pc24_loads.json"
@@ -23,7 +26,13 @@ def main():
     print(f"Root reaction force  [N]:   {np.round(sol.root_force, 1)}")
     print(f"Root reaction moment [N.m]: {np.round(sol.root_moment, 1)}")
 
+    # Shear / bending-moment / torque diagrams along the span.
+    intf = internal_forces(load_loads(LOADS), span=coords[:, 1].max())
+    print(f"Root shear V(0)={intf.V[0]:.1f} N,  moment M(0)={intf.M[0]:.1f} N.m,"
+          f"  torque T(0)={intf.T[0]:.1f} N.m")
+
     plot_deformation(coords, sol, scale=3.0)
+    plot_internal_forces(intf)
 
 
 if __name__ == "__main__":

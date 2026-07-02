@@ -238,6 +238,29 @@ The plot shows the **bending** (deformed elastic axis) and the **torsion**
 (chord ribs tilted about the span axis, coloured by local twist); bending and
 twist share one `scale` factor, so nothing is exaggerated.
 
+### Shear, bending-moment and torque diagrams
+
+`internal_forces` returns the classic spanwise **load diagrams** — the numbers
+you size spars with. For this determinate cantilever they follow directly from
+equilibrium of the wing outboard of each section
+($V(y)=\int_y^L l\,\mathrm{d}\eta$, $M(y)=\int_y^L l\,(\eta-y)\,\mathrm{d}\eta$,
+$T(y)=\int_y^L q\,\mathrm{d}\eta$), so they are exact for the given load:
+
+```python
+from wingbox import internal_forces, plot_internal_forces, load_loads
+
+L = coords[:, 1].max()                       # span
+diag = internal_forces(load_loads("wings/pc24_loads.json"), span=L)
+diag.y, diag.V, diag.M, diag.T               # arrays: shear, moment, torque
+plot_internal_forces(diag)
+```
+
+![Shear, bending-moment and torque diagrams](docs/internal_forces.png)
+
+The root values ($V(0)\approx100$ kN, $M(0)\approx355$ kN·m, $T(0)\approx15$
+kN·m) equal the total shear/moment/torque reacted at the fuselage — matching the
+`Solution` root reactions up to the load-integration tolerance.
+
 ---
 
 ## 6. Defining a wing

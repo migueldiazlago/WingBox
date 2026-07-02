@@ -14,7 +14,40 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
 
-from wingbox.assemble import Solution
+from wingbox.assemble import Solution, InternalForces
+
+
+def plot_internal_forces(intf: InternalForces, save: str | None = None):
+    """Plot the shear ``V(y)``, bending moment ``M(y)`` and torque ``T(y)``.
+
+    Parameters
+    ----------
+    intf : the :class:`~wingbox.assemble.InternalForces` diagrams to draw.
+    save : path to save the figure; if ``None`` the figure is shown.
+    """
+    panels = [
+        (intf.V / 1e3, "shear  $V(y)$  [kN]", "#1f77b4"),
+        (intf.M / 1e3, "bending moment  $M(y)$  [kN·m]", "#d62728"),
+        (intf.T / 1e3, "torque  $T(y)$  [kN·m]", "#2ca02c"),
+    ]
+    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(7.0, 7.2))
+    for ax, (val, label, color) in zip(axes, panels):
+        ax.plot(intf.y, val, color=color, lw=2)
+        ax.fill_between(intf.y, val, color=color, alpha=0.15)
+        ax.axhline(0, color="0.7", lw=0.8)
+        ax.set_ylabel(label)
+        ax.grid(alpha=0.3)
+        ax.margins(x=0)
+    axes[0].set_title("Spanwise internal-force diagrams (root → tip)")
+    axes[-1].set_xlabel("span  $y$  [m]")
+    fig.tight_layout()
+
+    if save:
+        fig.savefig(save, dpi=150, bbox_inches="tight")
+    else:
+        plt.show()
+    return axes
+
 
 def _equal_aspect(ax, pts: np.ndarray) -> None:
     lo, hi = pts.min(axis=0), pts.max(axis=0)

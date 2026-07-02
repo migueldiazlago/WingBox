@@ -269,11 +269,16 @@ def fig_wing_section():
 # 4. actual solver output
 # --------------------------------------------------------------------------
 def fig_output():
-    from wingbox import solve_wing, plot_deformation, load_stations
+    from wingbox import (solve_wing, internal_forces, plot_deformation,
+                         plot_internal_forces, load_stations, load_loads)
 
-    sol = solve_wing("wings/pc24_wing_sections.json", "wings/pc24_loads.json")
-    coords = np.array([s["EC"] for s in load_stations("wings/pc24_wing_sections.json")])
+    wing, loads = "wings/pc24_wing_sections.json", "wings/pc24_loads.json"
+    sol = solve_wing(wing, loads)
+    coords = np.array([s["EC"] for s in load_stations(wing)])
     plot_deformation(coords, sol, scale=3.0, save=f"{HERE}/deformation.png")
+
+    intf = internal_forces(load_loads(loads), span=coords[:, 1].max())
+    plot_internal_forces(intf, save=f"{HERE}/internal_forces.png")
 
 
 if __name__ == "__main__":
