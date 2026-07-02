@@ -1,7 +1,8 @@
 # WingBox
 
 **A minimal 3D finite-element solver for a cantilevered wing.**
-*Made with Claude Code*
+
+*Made with Claude Code.*
 
 WingBox idealises a wing as a slender **beam** running along the span, clamped at
 the root, and loaded by a spanwise **lift distribution** $l(y)$ and **torsion
